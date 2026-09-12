@@ -242,6 +242,12 @@ Install it from the ZimaOS desktop: **App Store -> + -> Install a customized app
 - the model bind mount source, `/DATA/models/glm52_i4` by default;
 - `COLI_ALLOWED_HOSTS`, which must list the hostname you browse to.
 
+That file runs the container as root (`user: "0:0"`) and mounts `/model`
+read-write, because ZimaOS creates the model directory owned by root and an
+external exFAT or NTFS disk fixes ownership at mount time, where `chown` does
+nothing. Drop the `user` line if you keep the model on ext4 and chown it to uid
+1000 yourself.
+
 The API is published on host port 18000 and the Swagger UI on 18080. Both
 avoid 8000/8080, which commonly collide with other services.
 

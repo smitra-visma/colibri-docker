@@ -33,6 +33,12 @@ services:
   colibri:
     image: ghcr.io/smitra-visma/colibri-docker:latest
     container_name: colibri
+    # Run as root rather than the image's uid 1000. ZimaOS creates the model
+    # directory owned by root, and on an exFAT/NTFS disk ownership is fixed at
+    # mount time and `chown` does nothing at all, so uid 1000 cannot write the
+    # download. Files written here stay world-readable, so switching back to the
+    # image default later still serves.
+    user: "0:0"
     ports:
       - target: 8000
         published: "18000"
@@ -42,9 +48,9 @@ services:
       - type: bind
         source: /DATA/models/glm52_i4
         target: /model
-        # Set this to false when COLI_AUTO_DOWNLOAD is "1", so the container
-        # can write the weights it downloads.
-        read_only: true
+        # Read-write, so COLI_AUTO_DOWNLOAD can write the weights. Set this to
+        # true once the model is in place to serve it read-only.
+        read_only: false
     environment:
       # Model name used in API requests and reported by /v1/models.
       COLI_MODEL_ID: glm-5.2
@@ -56,11 +62,9 @@ services:
       COLI_MAX_QUEUE: "8"
       COLI_KV_SLOTS: "1"
       # "1" downloads the model into the mount above on first start, instead of
-      # fetching it beforehand over SSH. Requires read_only: false on that
-      # mount and a host directory owned by uid 1000:
-      #   sudo mkdir -p /DATA/models/glm52_i4
-      #   sudo chown 1000:1000 /DATA/models/glm52_i4
-      # Raise start_period below past the download time when you enable it.
+      # fetching it beforehand over SSH. It needs read_only: false on that mount,
+      # which is the default here. Raise start_period below past the download
+      # time before enabling it.
       COLI_AUTO_DOWNLOAD: "0"
       COLI_MODEL_REPO: mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp
     command:
