@@ -49,6 +49,10 @@ services:
       # Needs MODEL_MOUNT_MODE=rw and a host directory owned by uid 1000.
       COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-0}"
       COLI_MODEL_REPO: "${MODEL_REPO:-mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp}"
+      # COLI_CONVERT is deliberately not listed here: setting it would override
+      # the image's own default, which is 1 in the olmoe images (they convert a
+      # source checkpoint) and 0 in the GLM one. Add it here only to force a
+      # value.
       HF_TOKEN: "${HF_TOKEN:-}"
     command:
       - serve

@@ -107,7 +107,7 @@ docker run --rm -v /nvme/glm52_i4:/model:ro \
 `info` prints the model layout it detected; `doctor` checks it more strictly.
 
 A model from another family (Qwen3.6, Inkling, Kimi K3, DeepSeek V4) needs a
-different engine binary that this image does not contain — the launcher refuses
+different engine binary that neither image contains — the launcher refuses
 it rather than loading it with the GLM engine. Build those from an upstream
 checkout. Converting original weights yourself also happens upstream: the
 converter needs `torch` and is out of scope here.
@@ -175,6 +175,7 @@ All settings live in `.env`.
 | `MODEL_DIR` | *(required)* | Host directory holding the int4 model, mounted read-only at `/model` |
 | `MODEL_REPO` | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp` | Repository fetched by the downloader and by auto-download |
 | `COLI_AUTO_DOWNLOAD` | `0` | `1` makes the server container download the model on first start |
+| `COLI_CONVERT` | image default: `1` in the olmoe images, `0` in the GLM one | `1` converts the source checkpoint instead of downloading a prepared one; set it in the service's `environment` to override |
 | `MODEL_MOUNT_MODE` | `ro` | Mount mode for `/model`; must be `rw` for auto-download |
 | `COLI_START_PERIOD` | `10m` | Healthcheck grace period; raise it past the download time |
 | `HF_TOKEN` | *(empty)* | Hugging Face token, for a gated or private repository |
@@ -200,11 +201,44 @@ guard rejects the request. Set `COLI_API_KEY` before exposing the port to
 anything other than the local machine: without it, every endpoint is open to
 whoever can reach the port.
 
+## Image variants
+
+| Tag | Engine | Model | RAM |
+| --- | --- | --- | --- |
+| `latest` | GLM-5.2/5.3 | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp`, ~372 GB | 16 GB minimum, 24 GB comfortable |
+| `olmoe` | OLMoE 1B-7B | converted from `allenai/OLMoE-1B-7B-0125-Instruct`, ~7 GB int8 | 8 GB minimum |
+| `olmoe-baseline` | OLMoE 1B-7B | same | same |
+
+Each image ships exactly one engine binary and refuses a model from another
+family. Pick the variant to match the hardware:
+
+```ini
+# .env — small machine
+COLIBRI_IMAGE=ghcr.io/smitra-visma/colibri-docker:olmoe
+MODEL_REPO=allenai/OLMoE-1B-7B-0125-Instruct
+COLI_AUTO_DOWNLOAD=1
+MODEL_MOUNT_MODE=rw
+```
+
+No colibri container is published for OLMoE, so the `olmoe` images carry a
+converter and build one from the original weights on first start: with
+`COLI_AUTO_DOWNLOAD=1` and `COLI_CONVERT=1` (the image default) the entrypoint
+runs `convert_olmoe_merged.py` into `/model` instead of downloading. The
+converter streams one source shard at a time, so it does not need to hold the
+checkpoint in RAM.
+
+`olmoe-baseline` is compiled for plain `x86-64` rather than `x86-64-v3`. Use it
+on CPUs without AVX2 — anything older than Haswell (2013), which covers most
+DDR3-era machines. Check with `grep -o avx2 /proc/cpuinfo | head -1`: no output
+means the `x86-64-v3` images will die with `SIGILL`.
+
 ## Prebuilt image
 
-`.github/workflows/publish.yml` builds `linux/amd64` with `ARCH=x86-64-v3` and
-pushes to GHCR on every push to `main` and on every `v*` tag. Tags published:
-`latest`, `main`, `sha-<short>`, and for a version tag `X.Y.Z` and `X.Y`.
+`.github/workflows/publish.yml` builds `linux/amd64` for each variant in its
+matrix and pushes to GHCR on every push to `main` and on every `v*` tag. Tags
+published: `latest`, `main`, `sha-<short>` (and `X.Y.Z`, `X.Y` for a version
+tag) for the GLM image; `olmoe` and `olmoe-sha-<short>`, `olmoe-baseline` and
+`olmoe-baseline-sha-<short>` for the others.
 
 Run it without this repository checked out:
 

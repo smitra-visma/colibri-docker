@@ -27,6 +27,23 @@ else
     echo "  uid 1000, for example: chown -R 1000:1000 <host model dir>" >&2
     exit 1
   fi
+  if [ "${COLI_CONVERT:-0}" = "1" ]; then
+    # OLMoE has no published colibri container, so the image converts the
+    # original checkpoint itself. The converter streams one source shard at a
+    # time, so peak extra disk is one shard and peak RAM stays bounded.
+    if [ ! -x /opt/conv/bin/python ]; then
+      echo "colibri: COLI_CONVERT=1 but this image has no converter." >&2
+      echo "  Use the olmoe image, or convert from an upstream checkout." >&2
+      exit 1
+    fi
+    echo "colibri: converting $REPO into $MODEL_DIR (this takes a while)"
+    HF_HOME="${HF_HOME:-$MODEL_DIR/.hf-home}" \
+    HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}" \
+      /opt/conv/bin/python /app/tools/convert_olmoe_merged.py \
+        --repo "$REPO" --out "$MODEL_DIR"
+    echo "colibri: conversion complete"
+    exec python3 /app/coli "$@"
+  fi
   echo "colibri: downloading $REPO into $MODEL_DIR (this takes a long time)"
   # Xet is the current fast transfer path; hf_transfer is deprecated and its
   # variable now only prints a warning.

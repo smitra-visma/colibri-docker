@@ -22,10 +22,59 @@ env:
 
 jobs:
   publish:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GLM-5.2/5.3: the default image, published under the plain tags.
+          - name: glm
+            engine: colibri
+            arch: x86-64-v3
+            converter: none
+            convert: "0"
+            engine_path: /app/colibri
+            glm_only: "1"
+            model_repo: mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp
+            tags: |
+              type=ref,event=branch
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+              type=sha,format=short
+              type=raw,value=latest,enable={{is_default_branch}}
+          # OLMoE 1B-7B: ~7 GB model, 8 GB RAM, for machines that cannot hold
+          # GLM. Ships the converter, since no prebuilt container is published
+          # for this family.
+          - name: olmoe
+            engine: olmoe
+            arch: x86-64-v3
+            converter: torch
+            convert: "1"
+            engine_path: ""
+            glm_only: "0"
+            model_repo: allenai/OLMoE-1B-7B-0125-Instruct
+            tags: |
+              type=raw,value=olmoe,enable={{is_default_branch}}
+              type=sha,format=short,prefix=olmoe-sha-
+              type=semver,pattern=olmoe-{{version}}
+          # Same, built for baseline x86-64: DDR3-era CPUs older than Haswell
+          # have no AVX2 and die with SIGILL on the x86-64-v3 builds.
+          - name: olmoe-baseline
+            engine: olmoe
+            arch: x86-64
+            converter: torch
+            convert: "1"
+            engine_path: ""
+            glm_only: "0"
+            model_repo: allenai/OLMoE-1B-7B-0125-Instruct
+            tags: |
+              type=raw,value=olmoe-baseline,enable={{is_default_branch}}
+              type=sha,format=short,prefix=olmoe-baseline-sha-
+              type=semver,pattern=olmoe-baseline-{{version}}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,12 +92,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+          tags: ${{ matrix.tags }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -60,14 +104,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             COLIBRI_REF=${{ inputs.colibri_ref || 'main' }}
-            ARCH=x86-64-v3
+            ARCH=${{ matrix.arch }}
+            ENGINE=${{ matrix.engine }}
+            CONVERTER=${{ matrix.converter }}
+            CONVERT=${{ matrix.convert }}
+            COLI_ENGINE_PATH=${{ matrix.engine_path }}
+            GLM_ONLY=${{ matrix.glm_only }}
+            MODEL_REPO=${{ matrix.model_repo }}
           # The engine build is the slow part and does not depend on this repo,
-          # so cache it between runs.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # so cache it between runs. The scope keeps the variants apart.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
       - name: Smoke test the published image
         run: |
-          docker run --rm --entrypoint python3 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-$(git rev-parse --short HEAD) \
-            /app/coli --version
+          set -eu
+          prefix=""
+          if [ "${{ matrix.name }}" != "glm" ]; then prefix="${{ matrix.name }}-"; fi
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${prefix}sha-$(git rev-parse --short HEAD)"
+          docker run --rm --entrypoint python3 "$image" /app/coli --version
+          # The engine binary has to be present and executable under the name
+          # the launcher resolves for this family.
+          docker run --rm --entrypoint test "$image" -x /app/${{ matrix.engine }}
