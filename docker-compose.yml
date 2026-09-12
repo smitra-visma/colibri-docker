@@ -3,6 +3,9 @@
 #   cp .env.example .env   # then set MODEL_DIR
 #   docker compose up -d
 #
+# By default this pulls the prebuilt image from GHCR and falls back to a local
+# build if the pull fails. Force a local build with `docker compose build`.
+#
 #   curl http://localhost:8000/v1/chat/completions \
 #     -H 'Content-Type: application/json' \
 #     -d '{"model":"glm-5.2","messages":[{"role":"user","content":"Hi"}]}'
@@ -19,7 +22,11 @@ services:
         COLIBRI_REF: "${COLIBRI_REF:-main}"
         # x86-64-v3 is portable AVX2. Use a specific ISA level for more speed.
         ARCH: "${ARCH:-x86-64-v3}"
-    image: colibri-openapi
+    image: "${COLIBRI_IMAGE:-ghcr.io/smitra-visma/colibri-docker:latest}"
+    # Pull the published image when it is not already present locally; compose
+    # falls back to the build section above when the pull fails, and an explicit
+    # `docker compose build` always rebuilds from source.
+    pull_policy: "${COLIBRI_PULL_POLICY:-missing}"
     container_name: colibri
     ports:
       - "${COLI_PORT:-8000}:8000"

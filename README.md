@@ -4,6 +4,7 @@ Docker Compose setup that runs the [colibri](https://github.com/JustVugg/colibri
 inference engine and exposes an OpenAI-compatible HTTP API. The model is
 bind-mounted from the host, so it never becomes part of the image.
 
+- A prebuilt image is published to GHCR; building locally is also supported.
 - Engine sources are fetched and compiled at image build time — nothing from
   upstream is vendored here.
 - Runtime image is Debian slim plus `python3` and `libgomp1`; the launcher and
@@ -32,6 +33,9 @@ cp .env.example .env
 docker compose up -d
 docker compose logs -f colibri     # the first load takes several minutes
 ```
+
+This pulls `ghcr.io/smitra-visma/colibri-docker:latest`. If the pull fails,
+Compose builds the image from source instead.
 
 Then call the API:
 
@@ -91,6 +95,8 @@ All settings live in `.env`.
 | `COLI_KV_SLOTS` | `1` | Concurrent KV cache slots |
 | `COLIBRI_REF` | `main` | Upstream git ref to build; pin a commit for reproducible builds |
 | `ARCH` | `x86-64-v3` | Target CPU ISA passed to the compiler |
+| `COLIBRI_IMAGE` | `ghcr.io/smitra-visma/colibri-docker:latest` | Image to run |
+| `COLIBRI_PULL_POLICY` | `missing` | `missing`, `always`, or `never` |
 
 ### Exposing the server beyond localhost
 
@@ -100,6 +106,25 @@ reverse proxy, add that hostname to `COLI_ALLOWED_HOSTS` or the DNS-rebinding
 guard rejects the request. Set `COLI_API_KEY` before exposing the port to
 anything other than the local machine: without it, every endpoint is open to
 whoever can reach the port.
+
+## Prebuilt image
+
+`.github/workflows/publish.yml` builds `linux/amd64` with `ARCH=x86-64-v3` and
+pushes to GHCR on every push to `main` and on every `v*` tag. Tags published:
+`latest`, `main`, `sha-<short>`, and for a version tag `X.Y.Z` and `X.Y`.
+
+Run it without this repository checked out:
+
+```bash
+docker run --rm -p 8000:8000 -v /nvme/glm52_i4:/model:ro \
+  ghcr.io/smitra-visma/colibri-docker:latest \
+  serve --host 0.0.0.0 --port 8000
+```
+
+The published image needs a CPU with AVX2. To pin a different upstream engine
+revision, run the workflow manually (`workflow_dispatch`) with `colibri_ref`, or
+build locally. To always use your own build, set `COLIBRI_IMAGE` to a local tag
+and `COLIBRI_PULL_POLICY=never` in `.env`.
 
 ### Build for a specific CPU
 

@@ -1,0 +1,73 @@
+# Build the runtime image and publish it to GitHub Container Registry.
+#
+# The image is linux/amd64 only and is compiled for ARCH=x86-64-v3, a portable
+# AVX2 target. A host without AVX2, or one where a more specific ISA is wanted,
+# has to build locally instead — see the README.
+name: Publish image
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      colibri_ref:
+        description: Upstream colibri git ref to build
+        required: false
+        default: main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COLIBRI_REF=${{ inputs.colibri_ref || 'main' }}
+            ARCH=x86-64-v3
+          # The engine build is the slow part and does not depend on this repo,
+          # so cache it between runs.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the published image
+        run: |
+          docker run --rm --entrypoint python3 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-$(git rev-parse --short HEAD) \
+            /app/coli --version
