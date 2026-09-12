@@ -29,6 +29,35 @@ This image ships the GLM engine only, so it needs a model of the GLM-5.2/5.3
 family already converted to colibri's int4 layout. Download the prebuilt
 conversion from Hugging Face — about 372 GB, so check free space first.
 
+### With Compose, straight into the mounted directory
+
+Set `MODEL_DIR` in `.env` first; the downloader writes into that same directory,
+mounted read-write, so nothing lands in a container layer:
+
+```bash
+docker compose --profile download run --rm model-download
+```
+
+Change `MODEL_REPO` in `.env` to fetch a different repository, and set
+`HF_TOKEN` if it is gated. The download resumes: re-run the command after an
+interruption and it continues from what is already on disk.
+
+Without a Compose file — on ZimaOS, for instance — the same thing as one
+command:
+
+```bash
+docker run --rm -v /DATA/models/glm52_i4:/model \
+  -e HF_HUB_ENABLE_HF_TRANSFER=1 -e HF_HOME=/model/.hf-home \
+  python:3.12-slim sh -eu -c \
+  'pip install --no-cache-dir -q "huggingface_hub[cli,hf_transfer]" &&
+   hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp --local-dir /model'
+```
+
+The weights end up owned by root; the server mounts them read-only and reads
+them as uid 1000, which works because the files are world-readable.
+
+### On the host instead
+
 ```bash
 python3 -m pip install -U "huggingface_hub[cli,hf_transfer]"
 
@@ -38,11 +67,8 @@ hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp \
 ```
 
 On an older `huggingface_hub`, the command is
-`huggingface-cli download …` with the same arguments.
-
-The download resumes: re-run the same command after an interruption and it
-continues from the cached chunks. Point `--local-dir` at the directory you will
-set as `MODEL_DIR`, on a local NVMe filesystem.
+`huggingface-cli download …` with the same arguments. Point `--local-dir` at the
+directory you will set as `MODEL_DIR`, on a local NVMe filesystem.
 
 Then verify the directory before starting the server:
 
@@ -120,6 +146,8 @@ All settings live in `.env`.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MODEL_DIR` | *(required)* | Host directory holding the int4 model, mounted read-only at `/model` |
+| `MODEL_REPO` | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp` | Repository fetched by the `download` profile |
+| `HF_TOKEN` | *(empty)* | Hugging Face token, for a gated or private repository |
 | `COLI_MODEL_ID` | `glm-5.2` | Model name reported by the API and expected in requests |
 | `COLI_PORT` | `8000` | Host port for the API |
 | `DOCS_PORT` | `8080` | Host port for the Swagger UI |

@@ -16,6 +16,18 @@
 #   - The model directory must live on an internal NVMe or SATA SSD. A USB disk
 #     or an SMB/NFS share makes generation unusably slow.
 #   - A GLM-5.2 int4 model is about 360 GB on disk.
+#
+# To download the model straight into the mounted directory, run this once over
+# SSH on the ZimaOS box before installing the app (adjust the path to match the
+# bind mount below):
+#
+#   docker run --rm -v /DATA/models/glm52_i4:/model \
+#     -e HF_HUB_ENABLE_HF_TRANSFER=1 -e HF_HOME=/model/.hf-home \
+#     python:3.12-slim sh -eu -c \
+#     'pip install --no-cache-dir -q "huggingface_hub[cli,hf_transfer]" &&
+#      hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp --local-dir /model'
+#
+# It resumes if interrupted: run it again.
 name: colibri
 services:
   colibri:

@@ -63,6 +63,35 @@ services:
     # Streaming a large MoE model touches a lot of page cache; give it headroom.
     shm_size: "2gb"
 
+  # One-shot downloader: fetches the model straight into MODEL_DIR, so the
+  # weights land on the mounted volume and never inside a container layer.
+  #
+  #   docker compose --profile download run --rm model-download
+  #
+  # It is safe to re-run: the download resumes from what is already on disk.
+  # The mount is read-write here, unlike the read-only mount the server uses.
+  model-download:
+    image: python:3.12-slim
+    profiles: ["download"]
+    volumes:
+      - "${MODEL_DIR:?set MODEL_DIR to the directory that will hold the model}:/model"
+    environment:
+      MODEL_REPO: "${MODEL_REPO:-mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp}"
+      # Parallel chunked transfers. Set to 0 if the network dislikes them.
+      HF_HUB_ENABLE_HF_TRANSFER: "${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+      # Only needed for a gated or private repository.
+      HF_TOKEN: "${HF_TOKEN:-}"
+      # Keep the resume metadata next to the weights, not in the container.
+      HF_HOME: /model/.hf-home
+    working_dir: /model
+    entrypoint: ["sh", "-eu", "-c"]
+    command:
+      - |
+        pip install --no-cache-dir --quiet "huggingface_hub[cli,hf_transfer]"
+        echo "downloading $${MODEL_REPO} into $${PWD}"
+        hf download "$${MODEL_REPO}" --local-dir /model
+    restart: "no"
+
   # Browsable API reference for the endpoints above. Started only on demand:
   #   docker compose --profile docs up -d
   swagger-ui:
