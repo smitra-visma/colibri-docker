@@ -241,9 +241,15 @@ on the machine that will run it:
 ```bash
 cp .env.example .env                                   # set MODEL_DIR
 docker compose -f docker-compose.qwen.yml build
-docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
 docker compose -f docker-compose.qwen.yml up -d
 ```
+
+That file downloads the model itself on first start: `COLI_AUTO_DOWNLOAD`
+defaults to `1` and `/model` is mounted read-write, because the Qwen container
+is ~20 GB rather than GLM's 372 GB. The download runs only when `/model` holds
+no `tokenizer.json`, so later restarts go straight to serving. Set
+`COLI_AUTO_DOWNLOAD=0` to keep startup offline and use the `download` profile
+instead.
 
 It builds with `ENGINE=qwen36` and `ARCH=native`, which is safe because the
 image never leaves this host; set `ARCH=x86-64-v3` in `.env` to keep it

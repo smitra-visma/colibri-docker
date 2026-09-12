@@ -5,8 +5,11 @@
 #
 #   cp .env.example .env          # set MODEL_DIR, then:
 #   docker compose -f docker-compose.qwen.yml build
-#   docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
 #   docker compose -f docker-compose.qwen.yml up -d
+#
+# The container downloads the model on first start when MODEL_DIR is empty. To
+# fetch it separately instead, set COLI_AUTO_DOWNLOAD=0 and run:
+#   docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
 #
 #   curl http://localhost:18000/v1/chat/completions \
 #     -H 'Content-Type: application/json' \
@@ -41,14 +44,20 @@ services:
     ports:
       - "${COLI_PORT:-18000}:8000"
     volumes:
-      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the Qwen3.6 container}:/model:${MODEL_MOUNT_MODE:-ro}"
+      # Read-write by default, because this file downloads the model itself.
+      # Set MODEL_MOUNT_MODE=ro once the container is in place.
+      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the Qwen3.6 container}:/model:${MODEL_MOUNT_MODE:-rw}"
     environment:
       COLI_MODEL_ID: "${COLI_MODEL_ID:-qwen3.6}"
       COLI_API_KEY: "${COLI_API_KEY:-}"
       COLI_ALLOWED_HOSTS: "${COLI_ALLOWED_HOSTS:-}"
       COLI_MAX_QUEUE: "${COLI_MAX_QUEUE:-8}"
       COLI_KV_SLOTS: "${COLI_KV_SLOTS:-1}"
-      COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-0}"
+      # On by default here: the Qwen3.6 container is ~20 GB, small enough to
+      # fetch on first start. The download only runs when /model holds no
+      # tokenizer.json, so a restart with the model present goes straight to
+      # serving. Set COLI_AUTO_DOWNLOAD=0 to never touch the network.
+      COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-1}"
       COLI_MODEL_REPO: "${MODEL_REPO:-Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64}"
       HF_TOKEN: "${HF_TOKEN:-}"
     command:
@@ -65,9 +74,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      # A 20 GB container loads far faster than GLM's 372 GB, but raise this
-      # when COLI_AUTO_DOWNLOAD=1 so the download fits inside the grace period.
-      start_period: "${COLI_START_PERIOD:-5m}"
+      # Wide enough for the first-start download plus the load; the container
+      # only reports healthy once the server answers, so this has to outlast
+      # both. Lower it to a few minutes once the model is on disk.
+      start_period: "${COLI_START_PERIOD:-2h}"
     restart: unless-stopped
     stop_grace_period: 30s
     shm_size: "2gb"
