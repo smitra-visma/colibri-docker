@@ -244,6 +244,14 @@ docker compose -f docker-compose.qwen.yml build
 docker compose -f docker-compose.qwen.yml up -d
 ```
 
+Or use the wrapper, which picks podman or docker, resolves the model path, and
+explains the long "starting" phase:
+
+```bash
+./run-qwen.sh --model-dir ~/models/qwen36
+./run-qwen.sh --down
+```
+
 That file downloads the model itself on first start: `COLI_AUTO_DOWNLOAD`
 defaults to `1` and `/model` is mounted read-write, because the Qwen container
 is ~20 GB rather than GLM's 372 GB. The download runs only when `/model` holds
