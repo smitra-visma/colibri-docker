@@ -127,7 +127,7 @@ Compose builds the image from source instead.
 Then call the API:
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:18000/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
         "model": "glm-5.2",
@@ -141,7 +141,7 @@ Or with any OpenAI client:
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:18000/v1", api_key="not-needed")
 print(client.chat.completions.create(
     model="glm-5.2",
     messages=[{"role": "user", "content": "Hello"}],
@@ -154,7 +154,7 @@ print(client.chat.completions.create(
 
 ```bash
 docker compose --profile docs up -d swagger-ui
-open http://localhost:8080
+open http://localhost:18080
 ```
 
 | Endpoint | Purpose |
@@ -178,8 +178,8 @@ All settings live in `.env`.
 | `COLI_START_PERIOD` | `10m` | Healthcheck grace period; raise it past the download time |
 | `HF_TOKEN` | *(empty)* | Hugging Face token, for a gated or private repository |
 | `COLI_MODEL_ID` | `glm-5.2` | Model name reported by the API and expected in requests |
-| `COLI_PORT` | `8000` | Host port for the API |
-| `DOCS_PORT` | `8080` | Host port for the Swagger UI |
+| `COLI_PORT` | `18000` | Host port for the API; the container always listens on 8000 |
+| `DOCS_PORT` | `18080` | Host port for the Swagger UI |
 | `COLI_RAM` | `0` | Expert-cache RAM budget in GB; `0` lets the engine choose |
 | `COLI_API_KEY` | *(empty)* | Bearer token required on `/v1/*`; empty disables authentication |
 | `COLI_ALLOWED_HOSTS` | *(empty)* | Extra `Host` headers accepted by the DNS-rebinding guard |
@@ -208,7 +208,7 @@ pushes to GHCR on every push to `main` and on every `v*` tag. Tags published:
 Run it without this repository checked out:
 
 ```bash
-docker run --rm -p 8000:8000 -v /nvme/glm52_i4:/model:ro \
+docker run --rm -p 18000:8000 -v /nvme/glm52_i4:/model:ro \
   ghcr.io/smitra-visma/colibri-docker:latest \
   serve --host 0.0.0.0 --port 8000
 ```
@@ -242,7 +242,8 @@ Install it from the ZimaOS desktop: **App Store -> + -> Install a customized app
 - the model bind mount source, `/DATA/models/glm52_i4` by default;
 - `COLI_ALLOWED_HOSTS`, which must list the hostname you browse to.
 
-The API is published on port 8000 and the Swagger UI on 8081.
+The API is published on host port 18000 and the Swagger UI on 18080. Both
+avoid 8000/8080, which commonly collide with other services.
 
 Check the hardware before installing. The published image is built for
 `x86-64-v3`, so the CPU needs AVX2: ZimaBoard 2, ZimaBlade, and ZimaCube qualify,

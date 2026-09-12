@@ -35,7 +35,7 @@ services:
     container_name: colibri
     ports:
       - target: 8000
-        published: "8000"
+        published: "18000"
         protocol: tcp
     volumes:
       # EDIT ME: left side is the model directory on the ZimaOS host.
@@ -120,7 +120,7 @@ services:
     container_name: colibri-docs
     ports:
       - target: 8080
-        published: "8081"
+        published: "18080"
         protocol: tcp
     environment:
       # Served straight from the repository, so no file has to be copied to the
@@ -147,14 +147,14 @@ x-casaos:
   description:
     en_us: >
       Runs the colibri inference engine and serves an OpenAI-compatible HTTP API
-      on port 8000, so any OpenAI client works by pointing its base URL at this
-      machine. The model is not part of the image: it is bind-mounted read-only
-      from a directory on the host. A Swagger UI for the API is published on
-      port 8081.
+      on host port 18000, so any OpenAI client works by pointing its base URL at
+      this machine. The model is not part of the image: it is bind-mounted
+      read-only from a directory on the host. A Swagger UI for the API is
+      published on host port 18080. Both ports avoid the crowded 8000 and 8080.
   icon: https://raw.githubusercontent.com/JustVugg/colibri/main/assets/colibri-icon.svg
   thumbnail: ""
   index: /health
-  port_map: "8000"
+  port_map: "18000"
   scheme: http
   store_app_id: colibri
   tips:

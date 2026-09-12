@@ -13,13 +13,13 @@ logs:
 	docker compose logs -f colibri
 
 health:
-	curl -fsS http://localhost:$${COLI_PORT:-8000}/health && echo
+	curl -fsS http://localhost:$${COLI_PORT:-18000}/health && echo
 
 models:
-	curl -fsS http://localhost:$${COLI_PORT:-8000}/v1/models && echo
+	curl -fsS http://localhost:$${COLI_PORT:-18000}/v1/models && echo
 
 chat:
-	curl -fsS http://localhost:$${COLI_PORT:-8000}/v1/chat/completions \
+	curl -fsS http://localhost:$${COLI_PORT:-18000}/v1/chat/completions \
 		-H 'Content-Type: application/json' \
 		-d '{"model":"$(or $(MODEL_ID),glm-5.2)","messages":[{"role":"user","content":"$(or $(PROMPT),Hello)"}],"max_tokens":128}' \
 		&& echo

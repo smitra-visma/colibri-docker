@@ -6,7 +6,7 @@
 # By default this pulls the prebuilt image from GHCR and falls back to a local
 # build if the pull fails. Force a local build with `docker compose build`.
 #
-#   curl http://localhost:8000/v1/chat/completions \
+#   curl http://localhost:18000/v1/chat/completions \
 #     -H 'Content-Type: application/json' \
 #     -d '{"model":"glm-5.2","messages":[{"role":"user","content":"Hi"}]}'
 #
@@ -29,7 +29,9 @@ services:
     pull_policy: "${COLIBRI_PULL_POLICY:-missing}"
     container_name: colibri
     ports:
-      - "${COLI_PORT:-8000}:8000"
+      # Host port 18000, not 8000: 8000 collides with half the self-hosted
+      # world. The container still listens on 8000 internally.
+      - "${COLI_PORT:-18000}:8000"
     volumes:
       # Read-only by default. Set MODEL_MOUNT_MODE=rw when COLI_AUTO_DOWNLOAD=1,
       # so the container can write the weights it downloads.
@@ -108,7 +110,7 @@ services:
     container_name: colibri-docs
     profiles: ["docs"]
     ports:
-      - "${DOCS_PORT:-8080}:8080"
+      - "${DOCS_PORT:-18080}:8080"
     environment:
       SWAGGER_JSON: /spec/openapi.yaml
     volumes:
