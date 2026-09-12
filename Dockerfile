@@ -52,8 +52,12 @@ COPY --from=src /src/c/coli /src/c/version.py /src/c/openai_server.py \
                 /src/c/doctor.py /src/c/autotune.py ./
 COPY --from=src /src/c/tools/ ./tools/
 
+# COLI_DOCKER_GLM_ONLY makes the launcher reject a model from another family
+# with a clear message instead of feeding it to the GLM engine: this image
+# ships one engine binary, built from the `colibri` target.
 ENV COLI_MODEL=/model \
     COLI_ENGINE=/app/colibri \
+    COLI_DOCKER_GLM_ONLY=1 \
     PYTHONUNBUFFERED=1
 
 # The bind-mounted model lands here; the VOLUME declares that contract.

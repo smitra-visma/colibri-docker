@@ -21,8 +21,43 @@ bind-mounted from the host, so it never becomes part of the image.
   is latency-bound and a remote filesystem makes generation unusably slow.
 - 32 GB RAM or more is a realistic minimum; less works but is very slow.
 
-See the [upstream model conversion guide](https://github.com/JustVugg/colibri/blob/main/docker/README.md#step-1-download-the-model)
-for how to download and convert the weights.
+See [Getting the model](#getting-the-model) below.
+
+## Getting the model
+
+This image ships the GLM engine only, so it needs a model of the GLM-5.2/5.3
+family already converted to colibri's int4 layout. Download the prebuilt
+conversion from Hugging Face — about 372 GB, so check free space first.
+
+```bash
+python3 -m pip install -U "huggingface_hub[cli,hf_transfer]"
+
+export HF_HUB_ENABLE_HF_TRANSFER=1      # parallel chunks, much faster
+hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp \
+  --local-dir /nvme/glm52_i4
+```
+
+On an older `huggingface_hub`, the command is
+`huggingface-cli download …` with the same arguments.
+
+The download resumes: re-run the same command after an interruption and it
+continues from the cached chunks. Point `--local-dir` at the directory you will
+set as `MODEL_DIR`, on a local NVMe filesystem.
+
+Then verify the directory before starting the server:
+
+```bash
+docker run --rm -v /nvme/glm52_i4:/model:ro \
+  ghcr.io/smitra-visma/colibri-docker:latest info
+```
+
+`info` prints the model layout it detected; `doctor` checks it more strictly.
+
+A model from another family (Qwen3.6, Inkling, Kimi K3, DeepSeek V4) needs a
+different engine binary that this image does not contain — the launcher refuses
+it rather than loading it with the GLM engine. Build those from an upstream
+checkout. Converting original weights yourself also happens upstream: the
+converter needs `torch` and is out of scope here.
 
 ## Quick start
 
