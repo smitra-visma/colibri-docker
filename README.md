@@ -138,6 +138,25 @@ ARCH=x86-64-v4 docker compose build
 `ARCH=native` is deliberately not the default: it bakes in the build machine's
 instruction set and the binary dies with `SIGILL` on a different CPU.
 
+## ZimaOS / CasaOS
+
+`zimaos/docker-compose.zimaos.yml` is a self-contained variant for ZimaOS and
+CasaOS: no `.env` interpolation, no build step, plus the `x-casaos` metadata the
+app store uses for the title, icon, and port mapping.
+
+Install it from the ZimaOS desktop: **App Store -> + -> Install a customized app
+-> Import**, then paste or upload the file. Two values need editing first:
+
+- the model bind mount source, `/DATA/models/glm52_i4` by default;
+- `COLI_ALLOWED_HOSTS`, which must list the hostname you browse to.
+
+The API is published on port 8000 and the Swagger UI on 8081.
+
+Check the hardware before installing. The published image is built for
+`x86-64-v3`, so the CPU needs AVX2: ZimaBoard 2, ZimaBlade, and ZimaCube qualify,
+ZimaBoard 1 (Apollo Lake) does not. Keep the model on an internal NVMe or SATA
+SSD — a USB disk or an SMB/NFS share makes generation unusably slow.
+
 ## Operating notes
 
 - The healthcheck has a 10 minute `start_period`, because a cold load of a

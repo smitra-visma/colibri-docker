@@ -1,0 +1,138 @@
+# colibri for ZimaOS / CasaOS.
+#
+# Install: ZimaOS desktop -> App Store -> the "+" button -> Install a customized
+# app -> Import, then paste this file (or upload it) and adjust the two values
+# marked EDIT ME below.
+#
+# ZimaOS imports the compose file literally: there is no .env interpolation and
+# no `docker compose build`, so every value here is a literal and the image is
+# pulled from GHCR. Use the repository's main docker-compose.yml instead when
+# you run this from a shell.
+#
+# Before installing, check the host:
+#   - CPU must support AVX2. The published image is built for x86-64-v3.
+#     ZimaBoard 1 (Apollo Lake) does NOT have AVX2 and cannot run this image;
+#     ZimaBoard 2, ZimaBlade and ZimaCube (Alder Lake / Core i5) do.
+#   - The model directory must live on an internal NVMe or SATA SSD. A USB disk
+#     or an SMB/NFS share makes generation unusably slow.
+#   - A GLM-5.2 int4 model is about 360 GB on disk.
+name: colibri
+services:
+  colibri:
+    image: ghcr.io/smitra-visma/colibri-docker:latest
+    container_name: colibri
+    ports:
+      - target: 8000
+        published: "8000"
+        protocol: tcp
+    volumes:
+      # EDIT ME: left side is the model directory on the ZimaOS host.
+      - type: bind
+        source: /DATA/models/glm52_i4
+        target: /model
+        read_only: true
+    environment:
+      # Model name used in API requests and reported by /v1/models.
+      COLI_MODEL_ID: glm-5.2
+      # Bearer token for /v1/*. Empty means anyone on the LAN can use the API.
+      COLI_API_KEY: ""
+      # EDIT ME: the ZimaOS hostname you browse to, so the DNS-rebinding guard
+      # accepts requests that do not arrive as an IP address.
+      COLI_ALLOWED_HOSTS: "zima.local,zimaos.local"
+      COLI_MAX_QUEUE: "8"
+      COLI_KV_SLOTS: "1"
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # RAM budget in GB for the expert cache. 0 lets the engine size it from
+      # available memory; set a number to leave room for other ZimaOS apps.
+      - --ram
+      - "0"
+    healthcheck:
+      # A cold load of a 744B model off disk takes minutes, hence start_period.
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: "2gb"
+    x-casaos:
+      envs:
+        - container: COLI_MODEL_ID
+          description:
+            en_us: Model name used in API requests and reported by /v1/models.
+        - container: COLI_API_KEY
+          description:
+            en_us: Bearer token required on /v1/* requests. Leave empty for no authentication.
+        - container: COLI_ALLOWED_HOSTS
+          description:
+            en_us: Comma-separated hostnames accepted by the DNS-rebinding guard.
+        - container: COLI_MAX_QUEUE
+          description:
+            en_us: Maximum number of queued requests.
+        - container: COLI_KV_SLOTS
+          description:
+            en_us: Concurrent KV cache slots.
+      ports:
+        - container: "8000"
+          description:
+            en_us: OpenAI-compatible HTTP API.
+      volumes:
+        - container: /model
+          description:
+            en_us: Model directory, mounted read-only. Must be on an internal SSD.
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: colibri-docs
+    ports:
+      - target: 8080
+        published: "8081"
+        protocol: tcp
+    environment:
+      # Served straight from the repository, so no file has to be copied to the
+      # ZimaOS host. Replace with a local bind mount if the box is offline.
+      URLS: '[{"url":"https://raw.githubusercontent.com/smitra-visma/colibri-docker/main/docs/openapi.yaml","name":"colibri"}]'
+    restart: unless-stopped
+    x-casaos:
+      ports:
+        - container: "8080"
+          description:
+            en_us: Browsable API reference.
+
+x-casaos:
+  architectures:
+    - amd64
+  main: colibri
+  author: smitra-visma
+  developer: JustVugg
+  category: AI
+  title:
+    en_us: Colibri
+  tagline:
+    en_us: Local LLM inference with an OpenAI-compatible API.
+  description:
+    en_us: >
+      Runs the colibri inference engine and serves an OpenAI-compatible HTTP API
+      on port 8000, so any OpenAI client works by pointing its base URL at this
+      machine. The model is not part of the image: it is bind-mounted read-only
+      from a directory on the host. A Swagger UI for the API is published on
+      port 8081.
+  icon: https://raw.githubusercontent.com/JustVugg/colibri/main/assets/colibri-icon.svg
+  thumbnail: ""
+  index: /health
+  port_map: "8000"
+  scheme: http
+  store_app_id: colibri
+  tips:
+    before_install:
+      en_us: >
+        Set the model bind mount to the directory holding the converted int4
+        model, on an internal SSD. The host CPU must support AVX2. Expect the
+        first request after startup to take several minutes while the model
+        loads.
