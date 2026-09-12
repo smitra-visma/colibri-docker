@@ -1,0 +1,303 @@
+openapi: 3.1.0
+info:
+  title: colibri OpenAI-compatible API
+  version: "1.0.0"
+  description: |
+    HTTP API exposed by `coli serve` running inside the colibri container.
+
+    The endpoints under `/v1` follow the OpenAI Chat Completions and Completions
+    schemas, so existing OpenAI client libraries work by pointing `base_url` at
+    this server. An Anthropic-shaped `/v1/messages` endpoint is also translated
+    onto the same engine.
+
+    Authentication is enabled only when the container is started with
+    `COLI_API_KEY` set; otherwise the bearer token is ignored.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:8000
+    description: Local container
+security:
+  - bearerAuth: []
+tags:
+  - name: Chat
+  - name: Models
+  - name: Operations
+paths:
+  /health:
+    get:
+      tags: [Operations]
+      summary: Liveness probe
+      description: |
+        Always answers `{"status":"ok"}` once the HTTP server is up, including
+        while the model is still loading. Scheduler and hardware details are
+        added only for an authenticated request.
+      security: []
+      responses:
+        "200":
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  kv_slots: { type: integer }
+                  scheduler: { type: object, additionalProperties: true }
+                  hwinfo: { type: object, additionalProperties: true }
+  /v1/models:
+    get:
+      tags: [Models]
+      summary: List the served model
+      responses:
+        "200":
+          description: Model list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string, example: list }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Model" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/models/{model}:
+    get:
+      tags: [Models]
+      summary: Describe one model
+      parameters:
+        - name: model
+          in: path
+          required: true
+          schema: { type: string }
+          example: glm-5.2
+      responses:
+        "200":
+          description: Model description
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Model" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: Unknown model }
+  /v1/chat/completions:
+    post:
+      tags: [Chat]
+      summary: Create a chat completion
+      description: |
+        Set `stream: true` to receive `text/event-stream` chunks terminated by
+        `data: [DONE]`, matching the OpenAI streaming format.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatCompletionRequest" }
+            examples:
+              simple:
+                value:
+                  model: glm-5.2
+                  messages:
+                    - role: user
+                      content: Explain expert streaming in one sentence.
+                  max_tokens: 128
+      responses:
+        "200":
+          description: Completion, or an SSE stream when `stream` is true
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatCompletionResponse" }
+            text/event-stream:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Overloaded" }
+  /v1/completions:
+    post:
+      tags: [Chat]
+      summary: Create a text completion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, prompt]
+              properties:
+                model: { type: string, example: glm-5.2 }
+                prompt: { type: string }
+                max_tokens: { type: integer, default: 1024 }
+                temperature: { type: number }
+                top_p: { type: number }
+                stop:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: string }
+                stream: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Completion, or an SSE stream when `stream` is true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  object: { type: string, example: text_completion }
+                  created: { type: integer }
+                  model: { type: string }
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index: { type: integer }
+                        text: { type: string }
+                        finish_reason: { type: string }
+                  usage: { $ref: "#/components/schemas/Usage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Overloaded" }
+  /v1/messages:
+    post:
+      tags: [Chat]
+      summary: Create a message (Anthropic-shaped)
+      description: |
+        Translation layer over the same engine, for clients written against the
+        Anthropic Messages API. The request is rewritten into the chat
+        completion path; there is no second inference implementation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, messages, max_tokens]
+              properties:
+                model: { type: string, example: glm-5.2 }
+                max_tokens: { type: integer }
+                system: { type: string }
+                messages:
+                  type: array
+                  items: { $ref: "#/components/schemas/ChatMessage" }
+                temperature: { type: number }
+                top_p: { type: number }
+                stop_sequences:
+                  type: array
+                  items: { type: string }
+                stream: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Message, or an SSE stream when `stream` is true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  type: { type: string, example: message }
+                  role: { type: string, example: assistant }
+                  model: { type: string }
+                  stop_reason: { type: string }
+                  content:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, example: text }
+                        text: { type: string }
+                  usage:
+                    type: object
+                    properties:
+                      input_tokens: { type: integer }
+                      output_tokens: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/Overloaded" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Required only when the server is started with COLI_API_KEY set.
+  responses:
+    Unauthorized:
+      description: Missing or wrong bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Malformed request body
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Overloaded:
+      description: Request queue is full or the queue timeout elapsed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Model:
+      type: object
+      properties:
+        id: { type: string, example: glm-5.2 }
+        object: { type: string, example: model }
+        created: { type: integer }
+        owned_by: { type: string, example: colibri }
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+        content: { type: string }
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model: { type: string, example: glm-5.2 }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ChatMessage" }
+        max_tokens: { type: integer, default: 1024 }
+        temperature: { type: number }
+        top_p: { type: number }
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        stream: { type: boolean, default: false }
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: chat.completion }
+        created: { type: integer }
+        model: { type: string }
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              message: { $ref: "#/components/schemas/ChatMessage" }
+              finish_reason: { type: string, example: stop }
+        usage: { $ref: "#/components/schemas/Usage" }
+    Usage:
+      type: object
+      properties:
+        prompt_tokens: { type: integer }
+        completion_tokens: { type: integer }
+        total_tokens: { type: integer }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message: { type: string }
+            type: { type: string }
+            code: { type: string }

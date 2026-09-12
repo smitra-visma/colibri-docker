@@ -1,0 +1,71 @@
+# colibri — OpenAI-compatible API server in one command.
+#
+#   cp .env.example .env   # then set MODEL_DIR
+#   docker compose up -d
+#
+#   curl http://localhost:8000/v1/chat/completions \
+#     -H 'Content-Type: application/json' \
+#     -d '{"model":"glm-5.2","messages":[{"role":"user","content":"Hi"}]}'
+#
+# The model is bind-mounted read-only from MODEL_DIR on the host. Keep it on a
+# local NVMe filesystem, never a network mount: expert streaming is latency
+# bound and a remote filesystem makes generation unusably slow.
+services:
+  colibri:
+    build:
+      context: .
+      args:
+        # Pin to a specific upstream commit or tag for reproducible builds.
+        COLIBRI_REF: "${COLIBRI_REF:-main}"
+        # x86-64-v3 is portable AVX2. Use a specific ISA level for more speed.
+        ARCH: "${ARCH:-x86-64-v3}"
+    image: colibri-openapi
+    container_name: colibri
+    ports:
+      - "${COLI_PORT:-8000}:8000"
+    volumes:
+      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the int4 model}:/model:ro"
+    environment:
+      # Name reported by /v1/models and expected in the "model" request field.
+      COLI_MODEL_ID: "${COLI_MODEL_ID:-glm-5.2}"
+      # Optional bearer token. Leave empty to serve without authentication.
+      COLI_API_KEY: "${COLI_API_KEY:-}"
+      # Extra Host headers accepted by the DNS-rebinding guard, comma separated.
+      COLI_ALLOWED_HOSTS: "${COLI_ALLOWED_HOSTS:-}"
+      COLI_MAX_QUEUE: "${COLI_MAX_QUEUE:-8}"
+      COLI_KV_SLOTS: "${COLI_KV_SLOTS:-1}"
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # RAM budget in GB for the expert cache. 0 lets the engine size it.
+      - --ram
+      - "${COLI_RAM:-0}"
+    healthcheck:
+      # /health answers before the model finishes loading, so start_period is
+      # generous: a cold 744B load off disk takes minutes.
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # Streaming a large MoE model touches a lot of page cache; give it headroom.
+    shm_size: "2gb"
+
+  # Browsable API reference for the endpoints above. Started only on demand:
+  #   docker compose --profile docs up -d
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: colibri-docs
+    profiles: ["docs"]
+    ports:
+      - "${DOCS_PORT:-8080}:8080"
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+    volumes:
+      - ./docs/openapi.yaml:/spec/openapi.yaml:ro
+    restart: unless-stopped
