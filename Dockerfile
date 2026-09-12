@@ -36,12 +36,23 @@ COPY --from=src /src/c ./c
 RUN make -C c colibri ARCH=${ARCH}
 
 # --------------------------------------------------------------------------
+# Stage 2b: the Hugging Face downloader, in its own virtualenv so the runtime
+# image keeps no pip, no build tools and no Debian package churn. It is only
+# used when COLI_AUTO_DOWNLOAD is set; the engine itself needs none of it.
+FROM debian:stable-slim AS hf
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-venv ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    python3 -m venv /opt/hf && \
+    /opt/hf/bin/pip install --no-cache-dir "huggingface_hub[cli,hf_transfer]"
+
+# --------------------------------------------------------------------------
 # Stage 3: runtime. The launcher and the HTTP gateway use only the Python
 # standard library, so there is nothing to pip install. libgomp1 provides the
 # OpenMP runtime the engine links against.
 FROM debian:stable-slim
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 libgomp1 && \
+    apt-get install -y --no-install-recommends python3 libgomp1 ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m -u 1000 colibri
 WORKDIR /app
@@ -51,14 +62,21 @@ COPY --from=src /src/c/coli /src/c/version.py /src/c/openai_server.py \
                 /src/c/v4_dsml.py /src/c/family_registry.py /src/c/resource_plan.py \
                 /src/c/doctor.py /src/c/autotune.py ./
 COPY --from=src /src/c/tools/ ./tools/
+COPY --from=hf /opt/hf /opt/hf
+COPY entrypoint.sh ./entrypoint.sh
 
+# COLI_AUTO_DOWNLOAD=1 makes the entrypoint fetch COLI_MODEL_REPO into /model
+# when that directory holds no model yet; it needs a read-write mount owned by
+# uid 1000. The default of 0 keeps startup offline.
 # COLI_DOCKER_GLM_ONLY makes the launcher reject a model from another family
 # with a clear message instead of feeding it to the GLM engine: this image
 # ships one engine binary, built from the `colibri` target.
 ENV COLI_MODEL=/model \
     COLI_ENGINE=/app/colibri \
     COLI_DOCKER_GLM_ONLY=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    COLI_AUTO_DOWNLOAD=0 \
+    COLI_MODEL_REPO=mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp
 
 # The bind-mounted model lands here; the VOLUME declares that contract.
 VOLUME ["/model"]
@@ -66,5 +84,5 @@ VOLUME ["/model"]
 EXPOSE 8000
 
 USER colibri
-ENTRYPOINT ["python3", "/app/coli"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["info"]

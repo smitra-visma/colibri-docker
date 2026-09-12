@@ -29,6 +29,32 @@ This image ships the GLM engine only, so it needs a model of the GLM-5.2/5.3
 family already converted to colibri's int4 layout. Download the prebuilt
 conversion from Hugging Face — about 372 GB, so check free space first.
 
+### Let the server container download it
+
+The image can fetch the model itself on first start, into the same mounted
+directory it serves from. In `.env`:
+
+```ini
+COLI_AUTO_DOWNLOAD=1
+MODEL_MOUNT_MODE=rw
+COLI_START_PERIOD=12h     # the healthcheck must outlast the download
+```
+
+Then `docker compose up -d`. The entrypoint downloads `MODEL_REPO` into
+`/model` when `tokenizer.json` is not already there, and starts the server
+afterwards. With the model already present it skips straight to serving, and
+with `COLI_AUTO_DOWNLOAD=0` (the default) it never touches the network.
+
+The container runs as uid 1000, so the host directory has to be writable by it:
+
+```bash
+sudo mkdir -p /nvme/glm52_i4 && sudo chown 1000:1000 /nvme/glm52_i4
+```
+
+Without that, startup stops with a message naming the directory rather than
+failing halfway through a 372 GB transfer. Set `MODEL_MOUNT_MODE` back to `ro`
+once the model is in place.
+
 ### With Compose, straight into the mounted directory
 
 Set `MODEL_DIR` in `.env` first; the downloader writes into that same directory,
@@ -146,7 +172,10 @@ All settings live in `.env`.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MODEL_DIR` | *(required)* | Host directory holding the int4 model, mounted read-only at `/model` |
-| `MODEL_REPO` | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp` | Repository fetched by the `download` profile |
+| `MODEL_REPO` | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp` | Repository fetched by the downloader and by auto-download |
+| `COLI_AUTO_DOWNLOAD` | `0` | `1` makes the server container download the model on first start |
+| `MODEL_MOUNT_MODE` | `ro` | Mount mode for `/model`; must be `rw` for auto-download |
+| `COLI_START_PERIOD` | `10m` | Healthcheck grace period; raise it past the download time |
 | `HF_TOKEN` | *(empty)* | Hugging Face token, for a gated or private repository |
 | `COLI_MODEL_ID` | `glm-5.2` | Model name reported by the API and expected in requests |
 | `COLI_PORT` | `8000` | Host port for the API |

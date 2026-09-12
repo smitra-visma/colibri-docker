@@ -42,6 +42,8 @@ services:
       - type: bind
         source: /DATA/models/glm52_i4
         target: /model
+        # Set this to false when COLI_AUTO_DOWNLOAD is "1", so the container
+        # can write the weights it downloads.
         read_only: true
     environment:
       # Model name used in API requests and reported by /v1/models.
@@ -53,6 +55,14 @@ services:
       COLI_ALLOWED_HOSTS: "zima.local,zimaos.local"
       COLI_MAX_QUEUE: "8"
       COLI_KV_SLOTS: "1"
+      # "1" downloads the model into the mount above on first start, instead of
+      # fetching it beforehand over SSH. Requires read_only: false on that
+      # mount and a host directory owned by uid 1000:
+      #   sudo mkdir -p /DATA/models/glm52_i4
+      #   sudo chown 1000:1000 /DATA/models/glm52_i4
+      # Raise start_period below past the download time when you enable it.
+      COLI_AUTO_DOWNLOAD: "0"
+      COLI_MODEL_REPO: mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp
     command:
       - serve
       - --host
@@ -90,6 +100,12 @@ services:
         - container: COLI_KV_SLOTS
           description:
             en_us: Concurrent KV cache slots.
+        - container: COLI_AUTO_DOWNLOAD
+          description:
+            en_us: Set to 1 to download the model on first start. Needs a writable model mount.
+        - container: COLI_MODEL_REPO
+          description:
+            en_us: Hugging Face repository downloaded when COLI_AUTO_DOWNLOAD is 1.
       ports:
         - container: "8000"
           description:

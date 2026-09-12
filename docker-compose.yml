@@ -31,7 +31,9 @@ services:
     ports:
       - "${COLI_PORT:-8000}:8000"
     volumes:
-      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the int4 model}:/model:ro"
+      # Read-only by default. Set MODEL_MOUNT_MODE=rw when COLI_AUTO_DOWNLOAD=1,
+      # so the container can write the weights it downloads.
+      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the int4 model}:/model:${MODEL_MOUNT_MODE:-ro}"
     environment:
       # Name reported by /v1/models and expected in the "model" request field.
       COLI_MODEL_ID: "${COLI_MODEL_ID:-glm-5.2}"
@@ -41,6 +43,11 @@ services:
       COLI_ALLOWED_HOSTS: "${COLI_ALLOWED_HOSTS:-}"
       COLI_MAX_QUEUE: "${COLI_MAX_QUEUE:-8}"
       COLI_KV_SLOTS: "${COLI_KV_SLOTS:-1}"
+      # 1 = download COLI_MODEL_REPO into /model on start when it is empty.
+      # Needs MODEL_MOUNT_MODE=rw and a host directory owned by uid 1000.
+      COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-0}"
+      COLI_MODEL_REPO: "${MODEL_REPO:-mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp}"
+      HF_TOKEN: "${HF_TOKEN:-}"
     command:
       - serve
       - --host
@@ -57,7 +64,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 10m
+      # Raise this when COLI_AUTO_DOWNLOAD=1: the first start also downloads
+      # hundreds of GB before the server begins listening.
+      start_period: "${COLI_START_PERIOD:-10m}"
     restart: unless-stopped
     stop_grace_period: 30s
     # Streaming a large MoE model touches a lot of page cache; give it headroom.
