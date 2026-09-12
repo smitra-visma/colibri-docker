@@ -206,6 +206,7 @@ whoever can reach the port.
 | Tag | Engine | Model | RAM |
 | --- | --- | --- | --- |
 | `latest` | GLM-5.2/5.3 | `mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp`, ~372 GB | 16 GB minimum, 24 GB comfortable |
+| local build | Qwen3.6-35B-A3B | `Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64`, ~20 GB | 24 GB, full residency |
 | `olmoe` | OLMoE 1B-7B | converted from `allenai/OLMoE-1B-7B-0125-Instruct`, ~7 GB int8 | 8 GB minimum |
 | `olmoe-baseline` | OLMoE 1B-7B | same | same |
 
@@ -231,6 +232,32 @@ checkpoint in RAM.
 on CPUs without AVX2 — anything older than Haswell (2013), which covers most
 DDR3-era machines. Check with `grep -o avx2 /proc/cpuinfo | head -1`: no output
 means the `x86-64-v3` images will die with `SIGILL`.
+
+## Qwen3.6, built locally
+
+No Qwen variant is published, so `docker-compose.qwen.yml` compiles the engine
+on the machine that will run it:
+
+```bash
+cp .env.example .env                                   # set MODEL_DIR
+docker compose -f docker-compose.qwen.yml build
+docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
+docker compose -f docker-compose.qwen.yml up -d
+```
+
+It builds with `ENGINE=qwen36` and `ARCH=native`, which is safe because the
+image never leaves this host; set `ARCH=x86-64-v3` in `.env` to keep it
+portable. The model is the prebuilt int4-gs64 container
+`Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64`, about 20 GB.
+
+Qwen3.6 differs from GLM in one way that matters: it wants the container fully
+resident, so **24 GB of RAM is the working minimum** rather than a comfort
+figure. In exchange it is far faster than GLM on the same box — upstream
+measures 1.44 tok/s on CPU, and 10.05 tok/s with the CUDA expert tier on two
+8 GB cards.
+
+`ENGINE=qwen38` in `.env` switches the build to Qwen3.8-Flash-Next instead;
+that checkpoint is ~185 GB and CPU-only.
 
 ## Prebuilt image
 

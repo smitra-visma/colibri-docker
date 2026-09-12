@@ -1,0 +1,107 @@
+# colibri — Qwen3.6-35B-A3B, built locally.
+#
+# Unlike docker-compose.yml, this file never pulls from GHCR: no Qwen variant is
+# published, so the engine is compiled here from the upstream sources.
+#
+#   cp .env.example .env          # set MODEL_DIR, then:
+#   docker compose -f docker-compose.qwen.yml build
+#   docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
+#   docker compose -f docker-compose.qwen.yml up -d
+#
+#   curl http://localhost:18000/v1/chat/completions \
+#     -H 'Content-Type: application/json' \
+#     -d '{"model":"qwen3.6","messages":[{"role":"user","content":"Hi"}]}'
+#
+# The model is the prebuilt int4-gs64 container, about 20 GB. Unlike GLM, Qwen3.6
+# wants full RAM residency: 24 GB is the working minimum, and a host that has to
+# page the container from disk will be slow regardless of how fast that disk is.
+#
+# ARCH=native is a reasonable choice here because the image is built on the
+# machine that runs it. Set ARCH=x86-64-v3 in .env to keep the binary portable,
+# or ARCH=x86-64 for a pre-Haswell CPU without AVX2.
+services:
+  colibri:
+    build:
+      context: .
+      args:
+        COLIBRI_REF: "${COLIBRI_REF:-main}"
+        ARCH: "${ARCH:-native}"
+        # Upstream make target and the binary that ships. The launcher resolves
+        # the engine from the model's config, so COLI_ENGINE stays empty and the
+        # GLM-only guard stays off.
+        ENGINE: "${ENGINE:-qwen36}"
+        COLI_ENGINE_PATH: ""
+        GLM_ONLY: "0"
+        CONVERTER: none
+        CONVERT: "0"
+        MODEL_REPO: "${MODEL_REPO:-Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64}"
+    image: "${COLIBRI_IMAGE:-colibri-qwen:local}"
+    pull_policy: never
+    container_name: colibri-qwen
+    ports:
+      - "${COLI_PORT:-18000}:8000"
+    volumes:
+      - "${MODEL_DIR:?set MODEL_DIR to the directory holding the Qwen3.6 container}:/model:${MODEL_MOUNT_MODE:-ro}"
+    environment:
+      COLI_MODEL_ID: "${COLI_MODEL_ID:-qwen3.6}"
+      COLI_API_KEY: "${COLI_API_KEY:-}"
+      COLI_ALLOWED_HOSTS: "${COLI_ALLOWED_HOSTS:-}"
+      COLI_MAX_QUEUE: "${COLI_MAX_QUEUE:-8}"
+      COLI_KV_SLOTS: "${COLI_KV_SLOTS:-1}"
+      COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-0}"
+      COLI_MODEL_REPO: "${MODEL_REPO:-Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # Qwen3.6 keeps the container resident, so this budget has to cover it.
+      - --ram
+      - "${COLI_RAM:-0}"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # A 20 GB container loads far faster than GLM's 372 GB, but raise this
+      # when COLI_AUTO_DOWNLOAD=1 so the download fits inside the grace period.
+      start_period: "${COLI_START_PERIOD:-5m}"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: "2gb"
+
+  # Same one-shot downloader as the main compose file, pointed at the Qwen
+  # container by default:
+  #   docker compose -f docker-compose.qwen.yml --profile download run --rm model-download
+  model-download:
+    image: python:3.12-slim
+    profiles: ["download"]
+    volumes:
+      - "${MODEL_DIR:?set MODEL_DIR to the directory that will hold the model}:/model"
+    environment:
+      MODEL_REPO: "${MODEL_REPO:-Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64}"
+      HF_XET_HIGH_PERFORMANCE: "${HF_XET_HIGH_PERFORMANCE:-1}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HF_HOME: /model/.hf-home
+    working_dir: /model
+    entrypoint: ["sh", "-eu", "-c"]
+    command:
+      - |
+        pip install --no-cache-dir --quiet "huggingface_hub[cli]"
+        echo "downloading $${MODEL_REPO} into $${PWD}"
+        hf download "$${MODEL_REPO}" --local-dir /model
+    restart: "no"
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: colibri-qwen-docs
+    profiles: ["docs"]
+    ports:
+      - "${DOCS_PORT:-18080}:8080"
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+    volumes:
+      - ./docs/openapi.yaml:/spec/openapi.yaml:ro
+    restart: unless-stopped
