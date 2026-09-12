@@ -22,9 +22,9 @@
 # bind mount below):
 #
 #   docker run --rm -v /DATA/models/glm52_i4:/model \
-#     -e HF_HUB_ENABLE_HF_TRANSFER=1 -e HF_HOME=/model/.hf-home \
+#     -e HF_XET_HIGH_PERFORMANCE=1 -e HF_HOME=/model/.hf-home \
 #     python:3.12-slim sh -eu -c \
-#     'pip install --no-cache-dir -q "huggingface_hub[cli,hf_transfer]" &&
+#     'pip install --no-cache-dir -q "huggingface_hub[cli]" &&
 #      hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp --local-dir /model'
 #
 # It resumes if interrupted: run it again.
@@ -67,6 +67,10 @@ services:
       # time before enabling it.
       COLI_AUTO_DOWNLOAD: "0"
       COLI_MODEL_REPO: mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp
+      # A Hugging Face token is not required for this public repository, but an
+      # unauthenticated download is rate limited and noticeably slower. Paste a
+      # read token from https://huggingface.co/settings/tokens here.
+      HF_TOKEN: ""
     command:
       - serve
       - --host
@@ -110,6 +114,9 @@ services:
         - container: COLI_MODEL_REPO
           description:
             en_us: Hugging Face repository downloaded when COLI_AUTO_DOWNLOAD is 1.
+        - container: HF_TOKEN
+          description:
+            en_us: Optional Hugging Face read token. Raises the download rate limit.
       ports:
         - container: "8000"
           description:

@@ -28,8 +28,10 @@ else
     exit 1
   fi
   echo "colibri: downloading $REPO into $MODEL_DIR (this takes a long time)"
+  # Xet is the current fast transfer path; hf_transfer is deprecated and its
+  # variable now only prints a warning.
   HF_HOME="${HF_HOME:-$MODEL_DIR/.hf-home}" \
-  HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" \
+  HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}" \
     /opt/hf/bin/hf download "$REPO" --local-dir "$MODEL_DIR"
   echo "colibri: download complete"
 fi

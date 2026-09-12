@@ -44,7 +44,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-venv ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     python3 -m venv /opt/hf && \
-    /opt/hf/bin/pip install --no-cache-dir "huggingface_hub[cli,hf_transfer]"
+    /opt/hf/bin/pip install --no-cache-dir "huggingface_hub[cli]"
 
 # --------------------------------------------------------------------------
 # Stage 3: runtime. The launcher and the HTTP gateway use only the Python

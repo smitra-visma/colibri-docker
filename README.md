@@ -65,7 +65,8 @@ docker compose --profile download run --rm model-download
 ```
 
 Change `MODEL_REPO` in `.env` to fetch a different repository, and set
-`HF_TOKEN` if it is gated. The download resumes: re-run the command after an
+`HF_TOKEN` if it is gated. Setting `HF_TOKEN` also lifts the
+unauthenticated rate limit, which makes a large download noticeably faster. The download resumes: re-run the command after an
 interruption and it continues from what is already on disk.
 
 Without a Compose file — on ZimaOS, for instance — the same thing as one
@@ -73,9 +74,9 @@ command:
 
 ```bash
 docker run --rm -v /DATA/models/glm52_i4:/model \
-  -e HF_HUB_ENABLE_HF_TRANSFER=1 -e HF_HOME=/model/.hf-home \
+  -e HF_XET_HIGH_PERFORMANCE=1 -e HF_HOME=/model/.hf-home \
   python:3.12-slim sh -eu -c \
-  'pip install --no-cache-dir -q "huggingface_hub[cli,hf_transfer]" &&
+  'pip install --no-cache-dir -q "huggingface_hub[cli]" &&
    hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp --local-dir /model'
 ```
 
@@ -85,9 +86,9 @@ them as uid 1000, which works because the files are world-readable.
 ### On the host instead
 
 ```bash
-python3 -m pip install -U "huggingface_hub[cli,hf_transfer]"
+python3 -m pip install -U "huggingface_hub[cli]"
 
-export HF_HUB_ENABLE_HF_TRANSFER=1      # parallel chunks, much faster
+export HF_XET_HIGH_PERFORMANCE=1        # Xet fast path
 hf download mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp \
   --local-dir /nvme/glm52_i4
 ```
