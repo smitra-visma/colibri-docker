@@ -7,6 +7,36 @@
 # /model when the directory does not already hold a model.
 set -eu
 
+# The gateway runs the engine as a child process and only sees its pipe close,
+# so an engine killed by the kernel surfaces as "colibri engine exited
+# unexpectedly" with nothing above it. The most common cause is an illegal
+# instruction: the x86-64-v3 images need AVX2, which no CPU older than Haswell
+# (2013) has. Running the binary with no arguments costs milliseconds and turns
+# that into a message that says what to do. Set COLI_SKIP_PREFLIGHT=1 to skip.
+if [ "${COLI_SKIP_PREFLIGHT:-0}" != "1" ]; then
+  engine_bin=""
+  if [ -n "${COLI_ENGINE:-}" ] && [ -x "${COLI_ENGINE}" ]; then
+    engine_bin="${COLI_ENGINE}"
+  else
+    for candidate in colibri olmoe qwen36 qwen38 glm53 inkling kimi_k3; do
+      if [ -x "/app/$candidate" ]; then engine_bin="/app/$candidate"; break; fi
+    done
+  fi
+  if [ -n "$engine_bin" ]; then
+    "$engine_bin" >/dev/null 2>&1 || engine_status=$?
+    # 132 = 128 + SIGILL. The binary prints usage and exits 1 when it is fine.
+    if [ "${engine_status:-0}" = "132" ]; then
+      echo "colibri: the engine cannot run on this CPU (illegal instruction)." >&2
+      echo "  This image is built for x86-64-v3, which requires AVX2." >&2
+      echo "  Check the host with: grep -o avx2 /proc/cpuinfo | head -1" >&2
+      echo "  No output means no AVX2. Use a baseline build instead, for" >&2
+      echo "  example ghcr.io/smitra-visma/colibri-docker:olmoe-baseline," >&2
+      echo "  or rebuild with --build-arg ARCH=x86-64." >&2
+      exit 1
+    fi
+  fi
+fi
+
 case "${COLI_AUTO_DOWNLOAD:-0}" in
   1|true|True|TRUE|yes|on) ;;
   *) exec python3 /app/coli "$@" ;;
