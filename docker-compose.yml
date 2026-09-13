@@ -54,6 +54,9 @@ services:
       # source checkpoint) and 0 in the GLM one. Add it here only to force a
       # value.
       HF_TOKEN: "${HF_TOKEN:-}"
+      # Parallel download workers. Leave empty for the default of 8; set 2 on a
+      # host with little RAM, where eight workers get OOM-killed (exit 137).
+      COLI_DOWNLOAD_WORKERS: "${COLI_DOWNLOAD_WORKERS:-}"
     command:
       - serve
       - --host

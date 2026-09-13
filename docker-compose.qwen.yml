@@ -60,6 +60,9 @@ services:
       COLI_AUTO_DOWNLOAD: "${COLI_AUTO_DOWNLOAD:-1}"
       COLI_MODEL_REPO: "${MODEL_REPO:-Kreuzzelg/qwen36-35b-a3b-colibri-i4-gs64}"
       HF_TOKEN: "${HF_TOKEN:-}"
+      # Parallel download workers. Leave empty for the default of 8; set 2 on a
+      # host with little RAM, where eight workers get OOM-killed (exit 137).
+      COLI_DOWNLOAD_WORKERS: "${COLI_DOWNLOAD_WORKERS:-}"
     command:
       - serve
       - --host

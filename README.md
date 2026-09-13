@@ -178,6 +178,7 @@ All settings live in `.env`.
 | `COLI_CONVERT` | image default: `1` in the olmoe images, `0` in the GLM one | `1` converts the source checkpoint instead of downloading a prepared one; set it in the service's `environment` to override |
 | `MODEL_MOUNT_MODE` | `ro` | Mount mode for `/model`; must be `rw` for auto-download |
 | `COLI_START_PERIOD` | `10m` | Healthcheck grace period; raise it past the download time |
+| `COLI_DOWNLOAD_WORKERS` | *(empty, hub default 8)* | Parallel download workers; set `2` on a low-memory host |
 | `HF_TOKEN` | *(empty)* | Hugging Face token, for a gated or private repository |
 | `COLI_MODEL_ID` | `glm-5.2` | Model name reported by the API and expected in requests |
 | `COLI_PORT` | `18000` | Host port for the API; the container always listens on 8000 |
@@ -333,6 +334,11 @@ ZimaBoard 1 (Apollo Lake) does not. Keep the model on an internal NVMe or SATA
 SSD — a USB disk or an SMB/NFS share makes generation unusably slow.
 
 ## Operating notes
+
+- `exited with code 137` during the download is the kernel OOM-killing it. Each
+  download worker buffers chunks, so on a small host set
+  `COLI_DOWNLOAD_WORKERS=2`. Under podman on macOS the limit is the VM, not the
+  Mac: `podman machine set --memory 8192` (with the machine stopped) raises it.
 
 - The healthcheck has a 10 minute `start_period`, because a cold load of a
   744B model from disk takes minutes. The container reports `starting` until

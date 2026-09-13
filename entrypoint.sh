@@ -44,12 +44,19 @@ else
     echo "colibri: conversion complete"
     exec python3 /app/coli "$@"
   fi
+  # Each worker holds chunks in memory, so eight of them can outgrow a small
+  # VM and the kernel kills the process with SIGKILL (exit 137). Cap them with
+  # COLI_DOWNLOAD_WORKERS on a memory-constrained host.
+  workers=""
+  if [ -n "${COLI_DOWNLOAD_WORKERS:-}" ]; then
+    workers="--max-workers ${COLI_DOWNLOAD_WORKERS}"
+  fi
   echo "colibri: downloading $REPO into $MODEL_DIR (this takes a long time)"
   # Xet is the current fast transfer path; hf_transfer is deprecated and its
   # variable now only prints a warning.
   HF_HOME="${HF_HOME:-$MODEL_DIR/.hf-home}" \
   HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}" \
-    /opt/hf/bin/hf download "$REPO" --local-dir "$MODEL_DIR"
+    /opt/hf/bin/hf download "$REPO" --local-dir "$MODEL_DIR" $workers
   echo "colibri: download complete"
 fi
 
