@@ -333,6 +333,34 @@ Check the hardware before installing. The published image is built for
 ZimaBoard 1 (Apollo Lake) does not. Keep the model on an internal NVMe or SATA
 SSD — a USB disk or an SMB/NFS share makes generation unusably slow.
 
+## Ollama on ZimaOS
+
+`zimaos/docker-compose.ollama.zimaos.yml` is unrelated to colibri and exists for
+the case colibri cannot serve: a box whose RAM is too small for a streamed MoE
+model. Ollama runs small dense models instead and exposes the same
+OpenAI-compatible shape, on port 11434 under `/v1`.
+
+Import it the same way (App Store -> + -> Install a customized app -> Import).
+Edit the bind mount source, and `OLLAMA_MODEL` in the `ollama-pull` service,
+which fetches one model once the server is healthy and then exits.
+
+Sizing on a CPU-only NAS:
+
+| Model | Download | Comfortable on |
+| --- | --- | --- |
+| `llama3.2:1b` | ~1.3 GB | 4 GB RAM |
+| `llama3.2:3b` | ~2.0 GB | 8 GB RAM |
+| `qwen2.5:7b` | ~4.7 GB | 12 GB RAM |
+| `gpt-oss:20b` | ~14 GB | 24 GB RAM, slow without a GPU |
+
+Call it exactly like the colibri stacks:
+
+```bash
+curl http://<host>:11434/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"llama3.2:3b","messages":[{"role":"user","content":"Hello"}]}'
+```
+
 ## Operating notes
 
 - `exited with code 137` during the download is the kernel OOM-killing it. Each

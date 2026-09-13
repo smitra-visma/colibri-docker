@@ -1,0 +1,147 @@
+# Ollama for ZimaOS / CasaOS.
+#
+# Install: ZimaOS desktop -> App Store -> the "+" button -> Install a customized
+# app -> Import, then paste this file and adjust the EDIT ME values.
+#
+# This is the pragmatic alternative to the colibri stacks in this repository:
+# colibri runs very large MoE models by streaming experts from disk, and wants
+# 16-24 GB of RAM to do it. Ollama runs small dense models that fit in whatever
+# RAM the box actually has, and serves the same OpenAI-compatible API shape.
+#
+# The models live on the host, in the directory bound to /root/.ollama below, so
+# they survive reinstalling the app and are never part of the image.
+#
+# After it starts, pull a model (over SSH, or from the app's terminal):
+#   docker exec ollama ollama pull llama3.2:3b
+# or let the companion service below do it on first start.
+#
+# Rough sizing, CPU-only, for a NAS without a GPU:
+#   llama3.2:1b   ~1.3 GB   usable on 4 GB of RAM
+#   llama3.2:3b   ~2.0 GB   comfortable on 8 GB, a good default
+#   qwen2.5:7b    ~4.7 GB   wants 12 GB or more
+#   gpt-oss:20b   ~14 GB    needs 24 GB, slow without a GPU
+name: ollama
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      # 11434 is Ollama's own port and every client defaults to it.
+      - target: 11434
+        published: "11434"
+        protocol: tcp
+    volumes:
+      # EDIT ME: host directory for model blobs. Put it on an internal SSD.
+      # Everything Ollama stores lives here, so this is the only thing to back
+      # up, and re-importing the app keeps the models.
+      - type: bind
+        source: /DATA/AppData/ollama
+        target: /root/.ollama
+        read_only: false
+    environment:
+      # Listen on all interfaces inside the container, so the published port
+      # reaches it. Without this Ollama binds to loopback only.
+      OLLAMA_HOST: "0.0.0.0:11434"
+      # How long a model stays resident after the last request. On a NAS that
+      # also does other work, "5m" frees the RAM again; "-1" keeps it loaded.
+      OLLAMA_KEEP_ALIVE: "5m"
+      # One model at a time, one request at a time: the conservative choice for
+      # a CPU-only box. Raise them if the host has RAM and cores to spare.
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      # Default context window. Larger contexts cost RAM per request.
+      OLLAMA_CONTEXT_LENGTH: "4096"
+    healthcheck:
+      # The CLI talks to the local server, so this is a real readiness check.
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 1m
+    restart: unless-stopped
+    stop_grace_period: 30s
+    x-casaos:
+      envs:
+        - container: OLLAMA_HOST
+          description:
+            en_us: Address the server binds to inside the container. Keep 0.0.0.0:11434.
+        - container: OLLAMA_KEEP_ALIVE
+          description:
+            en_us: How long a model stays in RAM after the last request. -1 keeps it loaded.
+        - container: OLLAMA_MAX_LOADED_MODELS
+          description:
+            en_us: How many models may be resident at once.
+        - container: OLLAMA_NUM_PARALLEL
+          description:
+            en_us: How many requests one model handles at the same time.
+        - container: OLLAMA_CONTEXT_LENGTH
+          description:
+            en_us: Default context window in tokens. Larger costs more RAM per request.
+      ports:
+        - container: "11434"
+          description:
+            en_us: Ollama API, including the OpenAI-compatible /v1 endpoints.
+      volumes:
+        - container: /root/.ollama
+          description:
+            en_us: Model storage. Keep it on an internal SSD.
+
+  # Pulls one model once the server is healthy, then exits. Remove this service
+  # if you prefer to pull by hand.
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # EDIT ME: the model to fetch on first start.
+      OLLAMA_HOST: "http://ollama:11434"
+      OLLAMA_MODEL: "llama3.2:3b"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if ollama list | grep -q "^${OLLAMA_MODEL%%:*}"; then
+          echo "ollama-pull: ${OLLAMA_MODEL} already present"
+        else
+          echo "ollama-pull: pulling ${OLLAMA_MODEL}"
+          ollama pull "${OLLAMA_MODEL}"
+        fi
+    restart: "no"
+    x-casaos:
+      envs:
+        - container: OLLAMA_MODEL
+          description:
+            en_us: Model pulled on first start, for example llama3.2:3b.
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: ollama
+  author: smitra-visma
+  developer: ollama
+  category: AI
+  title:
+    en_us: Ollama
+  tagline:
+    en_us: Run small language models locally, with an OpenAI-compatible API.
+  description: >
+    Ollama serves language models on port 11434, including OpenAI-compatible
+    endpoints under /v1, so any OpenAI client works by pointing its base URL at
+    this machine. Models are stored on the host directory bound to
+    /root/.ollama and are pulled on demand, never baked into the image. A
+    companion service fetches one model on first start.
+  icon: https://ollama.com/public/ollama.png
+  thumbnail: ""
+  index: /
+  port_map: "11434"
+  scheme: http
+  store_app_id: ollama
+  tips:
+    before_install:
+      en_us: >
+        Point the volume at a directory on an internal SSD, and pick a model
+        that fits the RAM of this machine: llama3.2:3b needs about 2 GB and is
+        a sensible default on a NAS without a GPU.
