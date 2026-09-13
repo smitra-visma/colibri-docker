@@ -155,13 +155,14 @@ x-casaos:
     en_us: Colibri OLMoE
   tagline:
     en_us: OLMoE 1B-7B locally, with an OpenAI-compatible API.
-  description: >
-    Runs the colibri engine with OLMoE 1B-7B and serves an OpenAI-compatible
-    HTTP API on host port 18000, so any OpenAI client works by pointing its
-    base URL at this machine. The model is not part of the image: the container
-    converts the original checkpoint into a bind-mounted host directory on
-    first start, about 7 GB, and needs roughly 8 GB of RAM to serve it. A
-    Swagger UI is published on host port 18080.
+  description:
+    en_us: >
+      Runs the colibri engine with OLMoE 1B-7B and serves an OpenAI-compatible
+      HTTP API on host port 18000, so any OpenAI client works by pointing its
+      base URL at this machine. The model is not part of the image: the container
+      converts the original checkpoint into a bind-mounted host directory on
+      first start, about 7 GB, and needs roughly 8 GB of RAM to serve it. A
+      Swagger UI is published on host port 18080.
   icon: https://raw.githubusercontent.com/JustVugg/colibri/main/assets/colibri-icon.svg
   thumbnail: ""
   index: /

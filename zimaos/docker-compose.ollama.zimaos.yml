@@ -127,12 +127,13 @@ x-casaos:
     en_us: Ollama
   tagline:
     en_us: Run small language models locally, with an OpenAI-compatible API.
-  description: >
-    Ollama serves language models on port 11434, including OpenAI-compatible
-    endpoints under /v1, so any OpenAI client works by pointing its base URL at
-    this machine. Models are stored on the host directory bound to
-    /root/.ollama and are pulled on demand, never baked into the image. A
-    companion service fetches one model on first start.
+  description:
+    en_us: >
+      Ollama serves language models on port 11434, including OpenAI-compatible
+      endpoints under /v1, so any OpenAI client works by pointing its base URL at
+      this machine. Models are stored on the host directory bound to
+      /root/.ollama and are pulled on demand, never baked into the image. A
+      companion service fetches one model on first start.
   icon: https://ollama.com/public/ollama.png
   thumbnail: ""
   index: /
