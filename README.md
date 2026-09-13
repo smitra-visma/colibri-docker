@@ -333,6 +333,28 @@ Check the hardware before installing. The published image is built for
 ZimaBoard 1 (Apollo Lake) does not. Keep the model on an internal NVMe or SATA
 SSD — a USB disk or an SMB/NFS share makes generation unusably slow.
 
+### OLMoE on ZimaOS
+
+`zimaos/docker-compose.olmoe.zimaos.yml` is the small-machine variant: the
+`olmoe` image, ~8 GB of RAM, a ~7 GB model instead of 372 GB. It runs as root
+with a read-write `/model`, because the container converts the checkpoint into
+that directory on first start — `COLI_AUTO_DOWNLOAD=1` with the image's
+`COLI_CONVERT=1`. Budget ~13 GB of transient download plus ~7 GB of output, and
+a long first start; it resumes if interrupted.
+
+Check AVX2 before importing:
+
+```bash
+grep -o avx2 /proc/cpuinfo | head -1
+```
+
+No output means the CPU predates Haswell, and the `x86-64-v3` build dies with
+`SIGILL` — which surfaces as `colibri engine exited unexpectedly`. Change the
+image tag to `ghcr.io/smitra-visma/colibri-docker:olmoe-baseline`.
+
+`COLI_DOWNLOAD_WORKERS` is set to `2` there, since a small host OOM-kills the
+default eight workers (exit 137).
+
 ## Ollama on ZimaOS
 
 `zimaos/docker-compose.ollama.zimaos.yml` is unrelated to colibri and exists for

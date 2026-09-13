@@ -1,0 +1,172 @@
+# colibri with the OLMoE engine, for ZimaOS / CasaOS.
+#
+# Install: ZimaOS desktop -> App Store -> the "+" button -> Install a customized
+# app -> Import, then paste this file and adjust the EDIT ME values.
+#
+# This is the small-machine variant of docker-compose.zimaos.yml. OLMoE 1B-7B
+# needs about 8 GB of RAM and a ~7 GB model, where GLM-5.2 needs 16-24 GB and
+# 372 GB of disk. Same engine, same OpenAI-compatible API, same port.
+#
+# AVX2: the `olmoe` tag is built for x86-64-v3. A CPU older than Haswell (2013)
+# has no AVX2 and the engine dies with SIGILL, usually surfacing as
+# "colibri engine exited unexpectedly". Check on the host with:
+#
+#   grep -o avx2 /proc/cpuinfo | head -1
+#
+# No output means AVX2 is missing: change the image tag below to
+# ghcr.io/smitra-visma/colibri-docker:olmoe-baseline, which is compiled for
+# plain x86-64.
+#
+# First start converts the model. No colibri container is published for OLMoE,
+# so the image downloads the original checkpoint and converts it into /model,
+# one shard at a time. Budget roughly 13 GB of transient download plus ~7 GB of
+# output on the mounted directory, and a long wait. It is resumable: a restart
+# skips whatever is already converted.
+name: colibri-olmoe
+services:
+  colibri:
+    image: ghcr.io/smitra-visma/colibri-docker:olmoe
+    container_name: colibri-olmoe
+    # Run as root rather than the image's uid 1000. ZimaOS creates the model
+    # directory owned by root, and on an exFAT/NTFS disk ownership is fixed at
+    # mount time and `chown` does nothing, so uid 1000 cannot write the
+    # conversion output. Files written stay world-readable.
+    user: "0:0"
+    ports:
+      - target: 8000
+        published: "18000"
+        protocol: tcp
+    volumes:
+      # EDIT ME: host directory for the converted model. Internal SSD, please.
+      # Read-write, because the container writes the conversion into it.
+      - type: bind
+        source: /DATA/models/olmoe
+        target: /model
+        read_only: false
+    environment:
+      COLI_MODEL_ID: olmoe
+      # Bearer token for /v1/*. Empty means anyone on the LAN can use the API.
+      COLI_API_KEY: ""
+      # EDIT ME: the hostname you browse to, for the DNS-rebinding guard.
+      COLI_ALLOWED_HOSTS: "zima.local,zimaos.local"
+      COLI_MAX_QUEUE: "8"
+      COLI_KV_SLOTS: "1"
+      # Fetch and convert the checkpoint on first start. Set to "0" once the
+      # model is in place to keep startup offline.
+      COLI_AUTO_DOWNLOAD: "1"
+      # COLI_CONVERT is inherited from the image (1 here) and must stay 1: no
+      # prepared OLMoE container exists to download.
+      COLI_MODEL_REPO: allenai/OLMoE-1B-7B-0125-Instruct
+      # Optional Hugging Face read token. Not required for this public
+      # checkpoint, but it lifts the unauthenticated rate limit.
+      HF_TOKEN: ""
+      # Parallel download workers. Lower this to "2" on a host with little RAM,
+      # where the default of 8 gets OOM-killed (the container exits with 137).
+      COLI_DOWNLOAD_WORKERS: "2"
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # RAM budget in GB for the expert cache. 0 lets the engine size it.
+      - --ram
+      - "0"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Wide enough to cover the first-start download and conversion. Lower it
+      # to a few minutes once the model is on disk.
+      start_period: 4h
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: "1gb"
+    x-casaos:
+      envs:
+        - container: COLI_MODEL_ID
+          description:
+            en_us: Model name used in API requests and reported by /v1/models.
+        - container: COLI_API_KEY
+          description:
+            en_us: Bearer token required on /v1/* requests. Leave empty for no authentication.
+        - container: COLI_ALLOWED_HOSTS
+          description:
+            en_us: Comma-separated hostnames accepted by the DNS-rebinding guard.
+        - container: COLI_AUTO_DOWNLOAD
+          description:
+            en_us: 1 downloads and converts the checkpoint on first start.
+        - container: COLI_MODEL_REPO
+          description:
+            en_us: Hugging Face checkpoint converted into the model directory.
+        - container: HF_TOKEN
+          description:
+            en_us: Optional Hugging Face read token. Raises the download rate limit.
+        - container: COLI_DOWNLOAD_WORKERS
+          description:
+            en_us: Parallel download workers. Lower it on a host with little RAM.
+        - container: COLI_MAX_QUEUE
+          description:
+            en_us: Maximum number of queued requests.
+        - container: COLI_KV_SLOTS
+          description:
+            en_us: Concurrent KV cache slots.
+      ports:
+        - container: "8000"
+          description:
+            en_us: OpenAI-compatible HTTP API.
+      volumes:
+        - container: /model
+          description:
+            en_us: Model directory, written on first start. Keep it on an internal SSD.
+
+  # Browsable API reference. Started with the app; remove it if the port is
+  # unwelcome.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: colibri-olmoe-docs
+    ports:
+      - target: 8080
+        published: "18080"
+        protocol: tcp
+    environment:
+      URLS: '[{"url":"https://raw.githubusercontent.com/smitra-visma/colibri-docker/main/docs/openapi.yaml","name":"colibri"}]'
+    restart: unless-stopped
+    x-casaos:
+      ports:
+        - container: "8080"
+          description:
+            en_us: Browsable API reference.
+
+x-casaos:
+  architectures:
+    - amd64
+  main: colibri
+  author: smitra-visma
+  developer: JustVugg
+  category: AI
+  title:
+    en_us: Colibri OLMoE
+  tagline:
+    en_us: OLMoE 1B-7B locally, with an OpenAI-compatible API.
+  description: >
+    Runs the colibri engine with OLMoE 1B-7B and serves an OpenAI-compatible
+    HTTP API on host port 18000, so any OpenAI client works by pointing its
+    base URL at this machine. The model is not part of the image: the container
+    converts the original checkpoint into a bind-mounted host directory on
+    first start, about 7 GB, and needs roughly 8 GB of RAM to serve it. A
+    Swagger UI is published on host port 18080.
+  icon: https://raw.githubusercontent.com/JustVugg/colibri/main/assets/colibri-icon.svg
+  thumbnail: ""
+  index: /health
+  port_map: "18000"
+  scheme: http
+  store_app_id: colibri-olmoe
+  tips:
+    before_install:
+      en_us: >
+        Check that the CPU has AVX2 (grep -o avx2 /proc/cpuinfo); without it,
+        switch the image tag to olmoe-baseline. Point the model volume at an
+        internal SSD with about 20 GB free. The first start downloads and
+        converts the checkpoint, which takes a long time and is resumable.
