@@ -61,6 +61,16 @@ RUN apt-get update && \
     /opt/hf/bin/pip install --no-cache-dir "huggingface_hub[cli]"
 
 # --------------------------------------------------------------------------
+# Stage 2d: the web dashboard. `coli web` and the static handler in the gateway
+# both serve web/dist next to openai_server.py, and that directory only exists
+# once the React app is built, so build it here rather than shipping an image
+# whose dashboard 404s.
+FROM node:22-slim AS web
+WORKDIR /build
+COPY --from=src /src/web ./web
+RUN cd web && npm ci && npm run build
+
+# --------------------------------------------------------------------------
 # Stage 2c: the checkpoint converter, used by the OLMoE image. OLMoE has no
 # published colibri container, so the image has to be able to build one from
 # the original weights. torch is pulled from the CPU wheel index: the GPU
@@ -97,6 +107,7 @@ COPY --from=src /src/c/coli /src/c/version.py /src/c/openai_server.py \
                 /src/c/v4_dsml.py /src/c/family_registry.py /src/c/resource_plan.py \
                 /src/c/doctor.py /src/c/autotune.py ./
 COPY --from=src /src/c/tools/ ./tools/
+COPY --from=web /build/web/dist ./web/dist
 COPY --from=hf /opt/hf /opt/hf
 COPY --from=conv /opt/conv /opt/conv
 COPY entrypoint.sh ./entrypoint.sh

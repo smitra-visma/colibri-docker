@@ -314,10 +314,17 @@ CasaOS: no `.env` interpolation, no build step, plus the `x-casaos` metadata the
 app store uses for the title, icon, and port mapping.
 
 Install it from the ZimaOS desktop: **App Store -> + -> Install a customized app
--> Import**, then paste or upload the file. Two values need editing first:
+-> Import**, then paste or upload the file. Three values need editing first:
 
 - the model bind mount source, `/DATA/models/glm52_i4` by default;
-- `COLI_ALLOWED_HOSTS`, which must list the hostname you browse to.
+- `COLI_ALLOWED_HOSTS`, which must list the hostname you browse to;
+- `COLI_API_KEY`, which ships as `change-me-before-you-expose-this`.
+
+Both ZimaOS colibri files run `coli web --no-browser` rather than `coli serve`,
+so clicking the app in ZimaOS opens the dashboard at `/` instead of a JSON
+health response. The API is unchanged and still lives under `/v1`. The image
+carries the built dashboard; `/health` stays public so the healthcheck works
+with an API key set.
 
 That file runs the container as root (`user: "0:0"`) and mounts `/model`
 read-write, because ZimaOS creates the model directory owned by root and an

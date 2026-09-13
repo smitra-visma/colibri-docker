@@ -45,8 +45,10 @@ services:
         read_only: false
     environment:
       COLI_MODEL_ID: olmoe
-      # Bearer token for /v1/*. Empty means anyone on the LAN can use the API.
-      COLI_API_KEY: ""
+      # EDIT ME: bearer token required on /v1/* requests, and the key the
+      # dashboard asks for. Change it before exposing the port beyond this
+      # machine; an empty value disables authentication entirely.
+      COLI_API_KEY: "change-me-before-you-expose-this"
       # EDIT ME: the hostname you browse to, for the DNS-rebinding guard.
       COLI_ALLOWED_HOSTS: "zima.local,zimaos.local"
       COLI_MAX_QUEUE: "8"
@@ -64,7 +66,10 @@ services:
       # where the default of 8 gets OOM-killed (the container exits with 137).
       COLI_DOWNLOAD_WORKERS: "2"
     command:
-      - serve
+      # `web` is `serve` plus the dashboard at /, which the image now carries.
+      # --no-browser because there is no browser to open inside a container.
+      - web
+      - --no-browser
       - --host
       - 0.0.0.0
       - --port
@@ -90,7 +95,7 @@ services:
             en_us: Model name used in API requests and reported by /v1/models.
         - container: COLI_API_KEY
           description:
-            en_us: Bearer token required on /v1/* requests. Leave empty for no authentication.
+            en_us: Bearer token required on /v1/* requests, and the key the dashboard asks for. Empty disables authentication.
         - container: COLI_ALLOWED_HOSTS
           description:
             en_us: Comma-separated hostnames accepted by the DNS-rebinding guard.
@@ -159,7 +164,7 @@ x-casaos:
     Swagger UI is published on host port 18080.
   icon: https://raw.githubusercontent.com/JustVugg/colibri/main/assets/colibri-icon.svg
   thumbnail: ""
-  index: /health
+  index: /
   port_map: "18000"
   scheme: http
   store_app_id: colibri-olmoe
